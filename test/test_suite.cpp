@@ -105,6 +105,22 @@ do {                                                             \
     #define DISABLE_WARNING_PRINTF_FORMAT_OVERFLOW
     #define DISABLE_WARNING_PRINTF_FORMAT_INVALID_SPECIFIER
 
+#elif defined(__NVCC__)
+    #define DO_PRAGMA(X) _Pragma(#X)
+    #define DISABLE_WARNING_PUSH           DO_PRAGMA(push)
+    #define DISABLE_WARNING_POP            DO_PRAGMA(pop)
+  #ifdef __NVCC_DIAG_PRAGMA_SUPPORT__
+    #define DISABLE_WARNING(warning_code)  DO_PRAGMA(nv_diag_suppress warning_code)
+  #else
+    #define DISABLE_WARNING(warning_code)  DO_PRAGMA(diag_suppress warning_code)
+  #endif
+
+    #define DISABLE_WARNING_PRINTF_FORMAT             DISABLE_WARNING(bad_printf_format_string)
+    #define DISABLE_WARNING_PRINTF_FORMAT_EXTRA_ARGS
+    #define DISABLE_WARNING_PRINTF_FORMAT_OVERFLOW
+    #define DISABLE_WARNING_PRINTF_FORMAT_INVALID_SPECIFIER
+
+
 #elif defined(__GNUC__) || defined(__clang__)
     #define DO_PRAGMA(X) _Pragma(#X)
     #define DISABLE_WARNING_PUSH           DO_PRAGMA(GCC diagnostic push)
