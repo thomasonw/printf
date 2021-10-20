@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.13)
+cmake_minimum_required (VERSION 3.20)
 
 include(CheckTypeSize)
 
@@ -10,6 +10,12 @@ project(
 	VERSION 6.0.0
 )
 
+option(BUILD_FOR_CUDA "Built a version of the library for CUDA device-side use"  OFF)
+if (BUILD_FOR_CUDA)
+	enable_language(CUDA)
+endif()
+
+
 option(BUILD_TESTS          "Build test programs for the library" OFF)
 option(BUILD_STATIC_LIBRARY "Build the library as static rather than shared" OFF)
 
@@ -20,7 +26,7 @@ option(SUPPORT_EXPONENTIAL_SPECIFIERS         "Support exponential floating poin
 option(SUPPORT_MSVC_STYLE_INTEGER_SPECIFIERS  "Support the I + bit size integer specifiers (%I8, %I16, %I32, %I64) as in Microsoft Visual C++" ON)
 option(SUPPORT_WRITEBACK_SPECIFIER            "Support the length write-back specifier (%n)" ON)
 option(SUPPORT_LONG_LONG                      "Support long long integral types (allows for the ll length modifier and affects %p)" ON)
-option(ALIAS_STANDARD_FUNCTION_NAMES          "Alias the standard library function names (printf, sprintf etc.) to the library's functions" ON)
+option(ALIAS_STANDARD_FUNCTION_NAMES          "Alias the standard library function names (printf, sprintf etc.) to the library's functions" OFF)
 
 foreach(opt
 	SUPPORT_DECIMAL_SPECIFIERS
@@ -66,28 +72,88 @@ if (BUILD_STATIC_LIBRARY)
 else()
 	add_library(printf SHARED)
 endif()
+
+set(built_targets printf)
+
+if (BUILD_FOR_CUDA)
+	add_library(printf_cuda STATIC)
+	set_target_properties(printf_cuda PROPERTIES LINKER_LANGUAGE CUDA)
+	list(APPEND built_targets printf_cuda)
+endif()
+
 set(GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/include")
 configure_file("printf_config.h.in" "${GENERATED_INCLUDE_DIR}/printf_config.h" @ONLY)
-target_sources(printf PRIVATE src/printf/printf.c "${GENERATED_INCLUDE_DIR}/printf_config.h" src/printf/printf.h)
-target_compile_definitions(printf PRIVATE PRINTF_INCLUDE_CONFIG_H)
-target_include_directories(printf PRIVATE "$<BUILD_INTERFACE:${GENERATED_INCLUDE_DIR}>")
+target_sources(printf PRIVATE src/printf/printf.c)
 
-set_property(TARGET printf PROPERTY C_STANDARD 99)
-set_property(TARGET printf PROPERTY C_STANDARD_REQUIRED ON)
-set_property(TARGET printf PROPERTY C_EXTENSIONS OFF)
-
-target_include_directories(
+set_target_properties(
 	printf
-	PRIVATE
-	src
-	PUBLIC
-	"$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
-	"$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/>"
+	PROPERTIES
+	C_STANDARD 99
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF
 )
+
+foreach(tgt ${built_targets})
+	target_sources(${tgt} PRIVATE "${GENERATED_INCLUDE_DIR}/printf_config.h" src/printf/printf.h)
+	target_compile_definitions(${tgt} PRIVATE PRINTF_INCLUDE_CONFIG_H)
+	target_include_directories(${tgt}
+		PRIVATE
+			"$<BUILD_INTERFACE:${GENERATED_INCLUDE_DIR}>"
+			src
+		PUBLIC
+			"$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+			"$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/src/>"
+	)
+	set_target_properties(${tgt} PROPERTIES
+			 LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib
+			 ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+endforeach()
+
+
 
 set_target_properties(printf PROPERTIES
          LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib
          ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
+
+if (BUILD_FOR_CUDA)
+	# This extra file is necessary for making CMake generate
+	# the extra printf.cu file only when printf.c changes, rather than
+	# every time.
+
+	file(GENERATE
+		OUTPUT generate-printf-cu.cmake
+		CONTENT [[
+cmake_minimum_required(VERSION 3.20)
+file(WRITE "${OUT}" "#include <printf/printf.c>")
+]]
+	)
+
+	# This extra file is necessary, because CMake won't let us compile
+	# printf.c once as a C file, then again as a CUDA file. See:
+	# https://gitlab.kitware.com/cmake/cmake/-/issues/22779
+	add_custom_command(
+		OUTPUT printf.cu
+		COMMAND ${CMAKE_COMMAND} -DOUT=printf.cu -P generate-printf-cu.cmake
+		COMMENT "Generating printf.cu from printf.c"
+		DEPENDS src/printf/printf.c)
+
+	set_property(SOURCE printf.cu PROPERTY LANGUAGE CUDA)
+
+	#	add_dependencies(printf_cuda printf.cu)
+	target_sources(printf_cuda PRIVATE printf.cu)
+	set_target_properties(
+		printf_cuda
+		PROPERTIES
+		CUDA_STANDARD_REQUIRED YES
+		CUDA_EXTENSIONS OFF
+		CUDA_SEPARABLE_COMPILATION ON
+	)
+	if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+		# This may be useful for debugging...
+		# target_compile_options(printf_cuda PRIVATE -G --keep -g)
+	endif()
+endif()
+
 
 if (CMAKE_C_COMPILER_ID STREQUAL "MSVC")
 	target_compile_options(printf PRIVATE /W4)
@@ -101,6 +167,7 @@ elseif (CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
 		target_compile_options(printf PUBLIC -fno-builtin-printf)
 	endif()
 endif()
+# TODO: Consider also enabling warnings with nvcc or other CUDA compilers
 
 if (BUILD_TESTS)
 	enable_testing()
@@ -127,7 +194,6 @@ if (UNIX)
 		DEPENDS printf
 		BYPRODUCTS printf.lst
 		COMMENT Dissassembles the compiled library into an .lst file)
-
 endif()
 
 # -------------------------
@@ -137,7 +203,7 @@ endif()
 include(GNUInstallDirs)
 
 install(
-	TARGETS printf
+	TARGETS ${built_targets}
 	EXPORT printf_export
 	RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
 	ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -169,6 +235,4 @@ install(
 	FILES "${CMAKE_CURRENT_BINARY_DIR}/printf-config-version.cmake"
 	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/printf"
 )
-
-
 
