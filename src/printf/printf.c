@@ -627,7 +627,7 @@ PRINTF_HD double power_of_10(int e) {
 	  case 16: return 1e16;
 	  case 17: return 1e17;
   }
-  return pow(10, e);
+  return 1; // Shouldn't get here
 #endif
 }
 
