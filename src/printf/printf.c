@@ -40,11 +40,17 @@
 #ifdef __cplusplus
 #include <cstdint>
 #include <climits>
+#ifdef __CUDA_ARCH__
+#include <cmath>
+#endif
 extern "C" {
 #else
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
+#ifdef __CUDA_ARCH__
+#include <math.h>
+#endif
 #endif // __cplusplus
 
 // Define this globally (e.g. gcc -DPRINTF_INCLUDE_CONFIG_H ...) to include the
@@ -582,12 +588,49 @@ struct double_components {
   bool is_negative;
 };
 
+
 #define NUM_DECIMAL_DIGITS_IN_INT64_T 18
 #define PRINTF_MAX_PRECOMPUTED_POWER_OF_10  NUM_DECIMAL_DIGITS_IN_INT64_T
-static const double powers_of_10[NUM_DECIMAL_DIGITS_IN_INT64_T] = {
-  1e00, 1e01, 1e02, 1e03, 1e04, 1e05, 1e06, 1e07, 1e08,
-  1e09, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17
-};
+
+/**
+ * Access a precomputed power of 10
+ * @param e A value in the range 0...PRINTF_MAX_PRECOMPUTED_POWER_OF_10
+ */
+PRINTF_HD double power_of_10(int e) {
+#ifndef __CUDA_ARCH__
+  static const double powers_of_10[NUM_DECIMAL_DIGITS_IN_INT64_T] =
+  {
+    1e00, 1e01, 1e02, 1e03, 1e04, 1e05, 1e06, 1e07, 1e08,
+    1e09, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17
+  };
+  return powers_of_10[e];
+#else
+  // Note: We could have used constant memory, but it's probably
+  // better to be slower and not mess with that limited resource.
+  switch(e) {
+	  case  0: return 1e00;
+	  case  1: return 1e01;
+	  case  2: return 1e02;
+	  case  3: return 1e03;
+	  case  4: return 1e04;
+	  case  5: return 1e05;
+	  case  6: return 1e06;
+	  case  7: return 1e07;
+	  case  8: return 1e08;
+	  case  9: return 1e09;
+	  case 10: return 1e10;
+	  case 11: return 1e11;
+	  case 12: return 1e12;
+	  case 13: return 1e13;
+	  case 14: return 1e14;
+	  case 15: return 1e15;
+	  case 16: return 1e16;
+	  case 17: return 1e17;
+  }
+  return pow(10, e);
+#endif
+}
+
 
 #define PRINTF_MAX_SUPPORTED_PRECISION NUM_DECIMAL_DIGITS_IN_INT64_T - 1
 
@@ -602,7 +645,7 @@ get_components(double number, printf_size_t precision)
   number_.is_negative = get_sign_bit(number);
   double abs_number = (number_.is_negative) ? -number : number;
   number_.integral = (int_fast64_t)abs_number;
-  double remainder = (abs_number - (double) number_.integral) * powers_of_10[precision];
+  double remainder = (abs_number - (double) number_.integral) * power_of_10((int)precision);
   number_.fractional = (int_fast64_t)remainder;
 
   remainder -= (double) number_.fractional;
@@ -610,7 +653,7 @@ get_components(double number, printf_size_t precision)
   if (remainder > 0.5) {
     ++number_.fractional;
     // handle rollover, e.g. case 0.99 with precision 1 is 1.0
-    if ((double) number_.fractional >= powers_of_10[precision]) {
+    if ((double) number_.fractional >= power_of_10((int) precision)) {
       number_.fractional = 0;
       ++number_.integral;
     }
@@ -653,11 +696,16 @@ PRINTF_HD static struct scaling_factor
 update_normalization(struct scaling_factor sf, double extra_multiplicative_factor)
 {
   struct scaling_factor result;
+#ifndef __CUDA_ARCH__
   if (sf.multiply) {
     result.multiply = true;
     result.raw_factor = sf.raw_factor * extra_multiplicative_factor;
   }
-  else {
+  else
+#endif
+  {
+    // sf.multiply is false, i.e. we have factors in opposite directions
+
     int factor_exp2 = get_exp2(get_bit_access(sf.raw_factor));
     int extra_factor_exp2 = get_exp2(get_bit_access(extra_multiplicative_factor));
 
@@ -690,7 +738,7 @@ get_normalized_components(bool negative, printf_size_t precision, double non_nor
   }
   components.integral = (int_fast64_t) scaled;
   double remainder = non_normalized - unapply_scaling((double) components.integral, normalization);
-  double prec_power_of_10 = powers_of_10[precision];
+  double prec_power_of_10 = power_of_10((int) precision);
   struct scaling_factor account_for_precision = update_normalization(normalization, prec_power_of_10);
   double scaled_remainder = apply_scaling(remainder, account_for_precision);
   double rounding_threshold = 0.5;
@@ -811,7 +859,7 @@ print_decimal_number(output_gadget_t* output, double number, printf_size_t preci
 
 // A floor function - but one which only works for numbers whose
 // floor value is representable by an int.
-PRINTF_HD static int
+PRINTF_HOST static int
 bastardized_floor(double x)
 {
   if (x >= 0) { return (int) x; }
@@ -821,7 +869,7 @@ bastardized_floor(double x)
 
 // Computes the base-10 logarithm of the input number - which must be an actual
 // positive number (not infinity or NaN, nor a sub-normal)
-PRINTF_HD static double
+PRINTF_HOST static double
 log10_of_positive(double positive_number)
 {
   // The implementation follows David Gay (https://www.ampl.com/netlib/fp/dtoa.c).
@@ -854,7 +902,7 @@ log10_of_positive(double positive_number)
   );
 }
 
-PRINTF_HD static double
+PRINTF_HOST static double
 pow10_of_int(int floored_exp10)
 {
   // A crude hack for avoiding undesired behavior with barely-normal or slightly-subnormal values.
@@ -884,13 +932,19 @@ print_exponential_number(output_gadget_t* output, double number, printf_size_t p
   bool abs_exp10_covered_by_powers_table;
   struct scaling_factor normalization;
 
-
   // Determine the decimal exponent
   if (abs_number == 0.0) {
     // TODO: This is a special-case for 0.0 (and -0.0); but proper handling is required for denormals more generally.
     floored_exp10 = 0; // ... and no need to set a normalization factor or check the powers table
   }
   else  {
+#if __CUDA_ARCH__
+    double exp10 = log10(abs_number);
+    floored_exp10 = floor(exp10);
+    double p10 = pow(10, floored_exp10);
+    normalization.raw_factor = p10;
+    abs_exp10_covered_by_powers_table = false;
+#else
     double exp10 = log10_of_positive(abs_number);
     floored_exp10 = bastardized_floor(exp10);
     double p10 = pow10_of_int(floored_exp10);
@@ -900,7 +954,8 @@ print_exponential_number(output_gadget_t* output, double number, printf_size_t p
       p10 /= 10;
     }
     abs_exp10_covered_by_powers_table = PRINTF_ABS(floored_exp10) < PRINTF_MAX_PRECOMPUTED_POWER_OF_10;
-    normalization.raw_factor = abs_exp10_covered_by_powers_table ? powers_of_10[PRINTF_ABS(floored_exp10)] : p10;
+    normalization.raw_factor = abs_exp10_covered_by_powers_table ? power_of_10(PRINTF_ABS(floored_exp10)) : p10;
+#endif
   }
 
   // We now begin accounting for the widths of the two parts of our printed field:
@@ -935,7 +990,7 @@ print_exponential_number(output_gadget_t* output, double number, printf_size_t p
   // Account for roll-over, e.g. rounding from 9.99 to 100.0 - which effects
   // the exponent and may require additional tweaking of the parts
   if (fall_back_to_decimal_only_mode) {
-    if ((flags & FLAGS_ADAPT_EXP) && floored_exp10 >= -1 && decimal_part_components.integral == powers_of_10[floored_exp10 + 1]) {
+    if ((flags & FLAGS_ADAPT_EXP) && floored_exp10 >= -1 && decimal_part_components.integral == power_of_10(floored_exp10 + 1)) {
       floored_exp10++; // Not strictly necessary, since floored_exp10 is no longer really used
       precision--;
       // ... and it should already be the case that decimal_part_components.fractional == 0
@@ -1447,7 +1502,6 @@ fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* for
   va_end(args);
   return ret;
 }
-
 
 #ifdef __cplusplus
 } // extern "C"
