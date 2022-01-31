@@ -268,20 +268,23 @@ typedef union {
 // 1. Some compilers are finicky about this;
 // 2. Some people may want to convert this to C89;
 // 3. If you try to use it as C++, only C++20 supports compound literals
-static inline double_with_bit_access get_bit_access(double x)
+PRINTF_HD static inline double_with_bit_access
+get_bit_access(double x)
 {
   double_with_bit_access dwba;
   dwba.F = x;
   return dwba;
 }
 
-static inline int get_sign_bit(double x)
+PRINTF_HD static inline int
+get_sign_bit(double x)
 {
   // The sign is stored in the highest bit
   return (int) (get_bit_access(x).U >> (DOUBLE_SIZE_IN_BITS - 1));
 }
 
-static inline int get_exp2(double_with_bit_access x)
+PRINTF_HD static inline int
+get_exp2(double_with_bit_access x)
 {
   // The exponent in an IEEE-754 floating-point number occupies a contiguous
   // sequence of bits (e.g. 52..62 for 64-bit doubles), but with a non-trivial representation: An
@@ -318,7 +321,11 @@ typedef struct {
 // or alternatively, that '\0' can be passed to the function in the output
 // gadget. The former assumption holds within the printf library. It also
 // assumes that the output gadget has been properly initialized.
-static inline void putchar_via_gadget(output_gadget_t* gadget, char c)
+#ifdef __CUDA_ARCH__
+__noinline__
+#endif
+PRINTF_HD static inline void
+putchar_via_gadget(output_gadget_t* gadget, char c)
 {
   printf_size_t write_pos = gadget->pos++;
     // We're _always_ increasing pos, so as to count how may characters
@@ -338,7 +345,8 @@ static inline void putchar_via_gadget(output_gadget_t* gadget, char c)
 }
 
 // Possibly-write the string-terminating '\0' character
-static inline void append_termination_with_gadget(output_gadget_t* gadget)
+PRINTF_HD static inline void
+append_termination_with_gadget(output_gadget_t* gadget)
 {
   if (gadget->function != NULL || gadget->max_chars == 0) {
     return;
@@ -352,13 +360,15 @@ static inline void append_termination_with_gadget(output_gadget_t* gadget)
 
 // We can't use putchar_ as is, since our output gadget
 // only takes pointers to functions with an extra argument
-static inline void putchar_wrapper(char c, void* unused)
+PRINTF_HOST static inline void
+putchar_wrapper(char c, void* unused)
 {
   (void) unused;
   putchar_(c);
 }
 
-static inline output_gadget_t discarding_gadget()
+PRINTF_HD static inline output_gadget_t
+discarding_gadget()
 {
   output_gadget_t gadget;
   gadget.function = NULL;
@@ -369,7 +379,8 @@ static inline output_gadget_t discarding_gadget()
   return gadget;
 }
 
-static inline output_gadget_t buffer_gadget(char* buffer, size_t buffer_size)
+PRINTF_HD static inline output_gadget_t
+buffer_gadget(char* buffer, size_t buffer_size)
 {
   printf_size_t usable_buffer_size = (buffer_size > PRINTF_MAX_POSSIBLE_BUFFER_SIZE) ?
     PRINTF_MAX_POSSIBLE_BUFFER_SIZE : (printf_size_t) buffer_size;
@@ -381,7 +392,8 @@ static inline output_gadget_t buffer_gadget(char* buffer, size_t buffer_size)
   return result;
 }
 
-static inline output_gadget_t function_gadget(void (*function)(char, void*), void* extra_arg)
+PRINTF_HD static inline output_gadget_t
+function_gadget(void (*function)(char, void*), void* extra_arg)
 {
   output_gadget_t result = discarding_gadget();
   result.function = function;
@@ -390,7 +402,8 @@ static inline output_gadget_t function_gadget(void (*function)(char, void*), voi
   return result;
 }
 
-static inline output_gadget_t extern_putchar_gadget()
+PRINTF_HOST static inline output_gadget_t
+extern_putchar_gadget()
 {
   return function_gadget(putchar_wrapper, NULL);
 }
@@ -399,7 +412,8 @@ static inline output_gadget_t extern_putchar_gadget()
 // @return The length of the string (excluding the terminating 0) limited by 'maxsize'
 // @note strlen uses size_t, but wes only use this function with printf_size_t
 // variables - hence the signature.
-static inline printf_size_t strnlen_s_(const char* str, printf_size_t maxsize)
+PRINTF_HD static inline printf_size_t
+strnlen_s_(const char* str, printf_size_t maxsize)
 {
   const char* s;
   for (s = str; *s && maxsize--; ++s);
@@ -409,14 +423,16 @@ static inline printf_size_t strnlen_s_(const char* str, printf_size_t maxsize)
 
 // internal test if char is a digit (0-9)
 // @return true if char is a digit
-static inline bool is_digit_(char ch)
+PRINTF_HD static inline bool
+is_digit_(char ch)
 {
   return (ch >= '0') && (ch <= '9');
 }
 
 
 // internal ASCII string to printf_size_t conversion
-static printf_size_t atou_(const char** str)
+PRINTF_HD static printf_size_t
+atou_(const char** str)
 {
   printf_size_t i = 0U;
   while (is_digit_(**str)) {
@@ -427,7 +443,8 @@ static printf_size_t atou_(const char** str)
 
 
 // output the specified string in reverse, taking care of any zero-padding
-static void out_rev_(output_gadget_t* output, const char* buf, printf_size_t len, printf_size_t width, printf_flags_t flags)
+PRINTF_HD static void
+out_rev_(output_gadget_t* output, const char* buf, printf_size_t len, printf_size_t width, printf_flags_t flags)
 {
   const printf_size_t start_pos = output->pos;
 
@@ -454,7 +471,8 @@ static void out_rev_(output_gadget_t* output, const char* buf, printf_size_t len
 
 // Invoked by print_integer after the actual number has been printed, performing necessary
 // work on the number's prefix (as the number is initially printed in reverse order)
-static void print_integer_finalization(output_gadget_t* output, char* buf, printf_size_t len, bool negative, numeric_base_t base, printf_size_t precision, printf_size_t width, printf_flags_t flags)
+PRINTF_HD static void
+print_integer_finalization(output_gadget_t* output, char* buf, printf_size_t len, bool negative, numeric_base_t base, printf_size_t precision, printf_size_t width, printf_flags_t flags)
 {
   printf_size_t unpadded_len = len;
 
@@ -521,7 +539,8 @@ static void print_integer_finalization(output_gadget_t* output, char* buf, print
 }
 
 // An internal itoa-like function
-static void print_integer(output_gadget_t* output, printf_unsigned_value_t value, bool negative, numeric_base_t base, printf_size_t precision, printf_size_t width, printf_flags_t flags)
+PRINTF_HD static void
+print_integer(output_gadget_t* output, printf_unsigned_value_t value, bool negative, numeric_base_t base, printf_size_t precision, printf_size_t width, printf_flags_t flags)
 {
   char buf[PRINTF_INTEGER_BUFFER_SIZE];
   printf_size_t len = 0U;
@@ -576,7 +595,8 @@ static const double powers_of_10[NUM_DECIMAL_DIGITS_IN_INT64_T] = {
 // Break up a double number - which is known to be a finite non-negative number -
 // into its base-10 parts: integral - before the decimal point, and fractional - after it.
 // Taken the precision into account, but does not change it even internally.
-static struct double_components get_components(double number, printf_size_t precision)
+PRINTF_HD static struct double_components
+get_components(double number, printf_size_t precision)
 {
   struct double_components number_;
   number_.is_negative = get_sign_bit(number);
@@ -617,17 +637,20 @@ struct scaling_factor {
   bool multiply; // if true, need to multiply by raw_factor; otherwise need to divide by it
 };
 
-static double apply_scaling(double num, struct scaling_factor normalization)
+PRINTF_HD static double
+apply_scaling(double num, struct scaling_factor normalization)
 {
   return normalization.multiply ? num * normalization.raw_factor : num / normalization.raw_factor;
 }
 
-static double unapply_scaling(double normalized, struct scaling_factor normalization)
+PRINTF_HD static double
+unapply_scaling(double normalized, struct scaling_factor normalization)
 {
   return normalization.multiply ? normalized / normalization.raw_factor : normalized * normalization.raw_factor;
 }
 
-static struct scaling_factor update_normalization(struct scaling_factor sf, double extra_multiplicative_factor)
+PRINTF_HD static struct scaling_factor
+update_normalization(struct scaling_factor sf, double extra_multiplicative_factor)
 {
   struct scaling_factor result;
   if (sf.multiply) {
@@ -651,7 +674,8 @@ static struct scaling_factor update_normalization(struct scaling_factor sf, doub
   return result;
 }
 
-static struct double_components get_normalized_components(bool negative, printf_size_t precision, double non_normalized, struct scaling_factor normalization, int floored_exp10)
+PRINTF_HD static struct double_components
+get_normalized_components(bool negative, printf_size_t precision, double non_normalized, struct scaling_factor normalization, int floored_exp10)
 {
   struct double_components components;
   components.is_negative = negative;
@@ -692,7 +716,8 @@ static struct double_components get_normalized_components(bool negative, printf_
 }
 #endif // PRINTF_SUPPORT_EXPONENTIAL_SPECIFIERS
 
-static void print_broken_up_decimal(
+PRINTF_HD static void
+print_broken_up_decimal(
   struct double_components number_, output_gadget_t* output, printf_size_t precision,
   printf_size_t width, printf_flags_t flags, char *buf, printf_size_t len)
 {
@@ -775,7 +800,8 @@ static void print_broken_up_decimal(
 }
 
       // internal ftoa for fixed decimal floating point
-static void print_decimal_number(output_gadget_t* output, double number, printf_size_t precision, printf_size_t width, printf_flags_t flags, char* buf, printf_size_t len)
+PRINTF_HD static void
+print_decimal_number(output_gadget_t* output, double number, printf_size_t precision, printf_size_t width, printf_flags_t flags, char* buf, printf_size_t len)
 {
   struct double_components value_ = get_components(number, precision);
   print_broken_up_decimal(value_, output, precision, width, flags, buf, len);
@@ -785,7 +811,8 @@ static void print_decimal_number(output_gadget_t* output, double number, printf_
 
 // A floor function - but one which only works for numbers whose
 // floor value is representable by an int.
-static int bastardized_floor(double x)
+PRINTF_HD static int
+bastardized_floor(double x)
 {
   if (x >= 0) { return (int) x; }
   int n = (int) x;
@@ -794,7 +821,8 @@ static int bastardized_floor(double x)
 
 // Computes the base-10 logarithm of the input number - which must be an actual
 // positive number (not infinity or NaN, nor a sub-normal)
-static double log10_of_positive(double positive_number)
+PRINTF_HD static double
+log10_of_positive(double positive_number)
 {
   // The implementation follows David Gay (https://www.ampl.com/netlib/fp/dtoa.c).
   //
@@ -826,8 +854,8 @@ static double log10_of_positive(double positive_number)
   );
 }
 
-
-static double pow10_of_int(int floored_exp10)
+PRINTF_HD static double
+pow10_of_int(int floored_exp10)
 {
   // A crude hack for avoiding undesired behavior with barely-normal or slightly-subnormal values.
   if (floored_exp10 == DOUBLE_MAX_SUBNORMAL_EXPONENT_OF_10) {
@@ -845,7 +873,8 @@ static double pow10_of_int(int floored_exp10)
   return dwba.F;
 }
 
-static void print_exponential_number(output_gadget_t* output, double number, printf_size_t precision, printf_size_t width, printf_flags_t flags, char* buf, printf_size_t len)
+PRINTF_HD static void
+print_exponential_number(output_gadget_t* output, double number, printf_size_t precision, printf_size_t width, printf_flags_t flags, char* buf, printf_size_t len)
 {
   const bool negative = get_sign_bit(number);
   // This number will decrease gradually (by factors of 10) as we "extract" the exponent out of it
@@ -959,7 +988,8 @@ static void print_exponential_number(output_gadget_t* output, double number, pri
 }
 #endif  // PRINTF_SUPPORT_EXPONENTIAL_SPECIFIERS
 
-static void print_floating_point(output_gadget_t* output, double value, printf_size_t precision, printf_size_t width, printf_flags_t flags, bool prefer_exponential)
+PRINTF_HD static void
+print_floating_point(output_gadget_t* output, double value, printf_size_t precision, printf_size_t width, printf_flags_t flags, bool prefer_exponential)
 {
   char buf[PRINTF_DECIMAL_BUFFER_SIZE];
   printf_size_t len = 0U;
@@ -1012,7 +1042,8 @@ static void print_floating_point(output_gadget_t* output, double value, printf_s
 
 // Advances the format pointer past the flags, and returns the parsed flags
 // due to the characters passed
-static printf_flags_t parse_flags(const char** format)
+PRINTF_HD static printf_flags_t
+parse_flags(const char** format)
 {
   printf_flags_t flags = 0U;
   do {
@@ -1030,7 +1061,8 @@ static printf_flags_t parse_flags(const char** format)
 // internal vsnprintf - used for implementing _all library functions
 // Note: We don't like the C standard's parameter names, so using more informative parameter names
 // here instead.
-static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
+PRINTF_HD static int
+_vsnprintf(output_gadget_t* output, const char* format, va_list args)
 {
   // Note: The library only calls _vsnprintf() with output->pos being 0. However, it is
   // possible to call this function with a non-zero pos value for some "remedial printing".
@@ -1350,24 +1382,28 @@ static int _vsnprintf(output_gadget_t* output, const char* format, va_list args)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-int vprintf_(const char* format, va_list arg)
+PRINTF_HOST int
+vprintf_(const char* format, va_list arg)
 {
   output_gadget_t gadget = extern_putchar_gadget();
   return _vsnprintf(&gadget, format, arg);
 }
 
-int vsnprintf_(char* s, size_t n, const char* format, va_list arg)
+PRINTF_HOST PRINTF_HD int
+vsnprintf_(char* s, size_t n, const char* format, va_list arg)
 {
   output_gadget_t gadget = buffer_gadget(s, n);
   return _vsnprintf(&gadget, format, arg);
 }
 
-int vsprintf_(char* s, const char* format, va_list arg)
+PRINTF_HD int
+vsprintf_(char* s, const char* format, va_list arg)
 {
   return vsnprintf_(s, PRINTF_MAX_POSSIBLE_BUFFER_SIZE, format, arg);
 }
 
-int vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, va_list arg)
+PRINTF_HD int
+vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, va_list arg)
 {
   output_gadget_t gadget = function_gadget(out, extra_arg);
   return _vsnprintf(&gadget, format, arg);
@@ -1382,7 +1418,8 @@ int printf_(const char* format, ...)
   return ret;
 }
 
-int sprintf_(char* s, const char* format, ...)
+PRINTF_HD int
+sprintf_(char* s, const char* format, ...)
 {
   va_list args;
   va_start(args, format);
@@ -1391,7 +1428,8 @@ int sprintf_(char* s, const char* format, ...)
   return ret;
 }
 
-int snprintf_(char* s, size_t n, const char* format, ...)
+PRINTF_HD int
+snprintf_(char* s, size_t n, const char* format, ...)
 {
   va_list args;
   va_start(args, format);
@@ -1400,7 +1438,8 @@ int snprintf_(char* s, size_t n, const char* format, ...)
   return ret;
 }
 
-int fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, ...)
+PRINTF_HD int
+fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, ...)
 {
   va_list args;
   va_start(args, format);

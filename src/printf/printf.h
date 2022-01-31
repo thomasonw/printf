@@ -48,6 +48,16 @@ extern "C" {
 # include <stddef.h>
 #endif
 
+#ifdef __CUDACC__
+#  define PRINTF_HD    __host__ __device__
+#  define PRINTF_HOST  __host__
+#  define PRINTF_DEV   __device__
+#else
+#  define PRINTF_HD
+#  define PRINTF_HOST
+#  define PRINTF_DEV
+#endif
+
 #ifdef __GNUC__
 # define ATTR_PRINTF(one_based_format_index, first_arg) \
 __attribute__((format(__printf__, (one_based_format_index), (first_arg))))
@@ -97,7 +107,7 @@ __attribute__((format(__printf__, (one_based_format_index), (first_arg))))
  *
  * @param c the single character to print
  */
-PRINTF_VISIBILITY
+PRINTF_HOST PRINTF_VISIBILITY
 void putchar_(char c);
 
 
@@ -114,9 +124,9 @@ void putchar_(char c);
  * @return The number of characters written into @p s, not counting the terminating null character
  */
  ///@{
-PRINTF_VISIBILITY
+PRINTF_HOST PRINTF_VISIBILITY
 int printf_(const char* format, ...) ATTR_PRINTF(1, 2);
-PRINTF_VISIBILITY
+PRINTF_HOST PRINTF_VISIBILITY
 int vprintf_(const char* format, va_list arg) ATTR_VPRINTF(1);
 ///@}
 
@@ -135,9 +145,9 @@ int vprintf_(const char* format, va_list arg) ATTR_VPRINTF(1);
  * @return The number of characters written into @p s, not counting the terminating null character
  */
 ///@{
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int  sprintf_(char* s, const char* format, ...) ATTR_PRINTF(2, 3);
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int vsprintf_(char* s, const char* format, va_list arg) ATTR_VPRINTF(2);
 ///@}
 
@@ -158,9 +168,9 @@ int vsprintf_(char* s, const char* format, va_list arg) ATTR_VPRINTF(2);
  *         is non-negative and less than @p n, the null-terminated string has been fully and successfully printed.
  */
 ///@{
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int  snprintf_(char* s, size_t count, const char* format, ...) ATTR_PRINTF(3, 4);
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int vsnprintf_(char* s, size_t count, const char* format, va_list arg) ATTR_VPRINTF(3);
 ///@}
 
@@ -180,9 +190,9 @@ int vsnprintf_(char* s, size_t count, const char* format, va_list arg) ATTR_VPRI
  * @return The number of characters for which the output f unction was invoked, not counting the terminating null character
  *
  */
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, ...) ATTR_PRINTF(3, 4);
-PRINTF_VISIBILITY
+PRINTF_HD PRINTF_VISIBILITY
 int vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, va_list arg) ATTR_VPRINTF(3);
 
 #ifdef __cplusplus
