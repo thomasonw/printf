@@ -80,10 +80,9 @@ __attribute__((format(__printf__, (one_based_format_index), (first_arg))))
 # define vprintf_   vprintf
 #endif
 
-// If you want to include this implementation file directly rather than
-// link against, this will let you control the functions' visibility,
-// e.g. make them static so as not to clash with other objects also
-// using them.
+// If you want to include this implementation file directly rather than link against,
+// this will let you control the functions' visibility, e.g. make them static so as not
+// to clash with other objects also using them.
 #ifndef PRINTF_VISIBILITY
 #define PRINTF_VISIBILITY
 #endif
@@ -93,12 +92,13 @@ __attribute__((format(__printf__, (one_based_format_index), (first_arg))))
  *
  * @note This function is not implemented by the library, only declared; you must provide an
  * implementation if you wish to use the @ref printf / @ref vprintf function (and possibly
- * for linking against the library, if your toolchain does not support discarding unused functions)
+ * for linking against the library, if your toolchain does not support discarding unused
+ * functions).
  *
  * @note The output could be as simple as a wrapper for the `write()` system call on a Unix-like
- * system, or even libc's @ref putchar , for replicating actual functionality of libc's @ref printf
- * function; but on an embedded system it may involve interaction with a special output device,
- * like a UART, etc.
+ * system, or even libc's @ref putchar , for replicating actual functionality of libc's
+ * @ref printf function; but on an embedded system it may involve interaction with a special
+ * output device, like a UART, etc.
  *
  * @note in libc's @ref putchar, the parameter type is an int; this was intended to support the
  * representation of either a proper character or EOF in a variable - but this is really not
@@ -114,14 +114,15 @@ void putchar_(char c);
 /**
  * An implementation of the C standard's printf/vprintf
  *
- * @note you must implement a @ref putchar_ function for using this function - it invokes @ref putchar_
- * rather than directly performing any I/O (which insulates it from any dependence on the operating system
- * and external libraries).
+ * @note you must implement a @ref putchar_ function for using this function - it invokes
+ * @ref putchar_ rather than directly performing any I/O (which insulates it from any dependence
+ * on the operating system and external libraries).
  *
- * @param format A string specifying the format of the output, with %-marked specifiers of how to interpret
- * additional arguments.
+ * @param format A string specifying the format of the output, with %-marked specifiers of how to
+ *     interpret additional arguments.
  * @param arg Additional arguments to the function, one for each %-specifier in @p format string
- * @return The number of characters written into @p s, not counting the terminating null character
+ * @return The number of characters written to the output (via @ref putchar_ calls), not counting
+ *     the terminating null character.
  */
  ///@{
 PRINTF_HOST PRINTF_VISIBILITY
@@ -134,13 +135,13 @@ int vprintf_(const char* format, va_list arg) ATTR_VPRINTF(1);
 /**
  * An implementation of the C standard's sprintf/vsprintf
  *
- * @note For security considerations (the potential for exceeding the buffer bounds), please consider using
- * the size-constrained variant, @ref snprintf / @ref vsnprintf , instead.
+ * @note For security considerations (the potential for exceeding the buffer bounds), please
+ *     consider using the size-constrained variant, @ref snprintf / @ref vsnprintf , instead.
  *
- * @param s An array in which to store the formatted string. It must be large enough to fit the formatted
- * output!
- * @param format A string specifying the format of the output, with %-marked specifiers of how to interpret
- * additional arguments.
+ * @param s An array in which to store the formatted string. It must be large enough to fit the
+ *     formatted output!
+ * @param format A string specifying the format of the output, with %-marked specifiers of how to
+ *     interpret additional arguments.
  * @param arg Additional arguments to the function, one for each specifier in @p format
  * @return The number of characters written into @p s, not counting the terminating null character
  */
@@ -155,17 +156,19 @@ int vsprintf_(char* s, const char* format, va_list arg) ATTR_VPRINTF(2);
 /**
  * An implementation of the C standard's snprintf/vsnprintf
  *
- * @param s An array in which to store the formatted string. It must be large enough to fit either the
- * entire formatted output, or at least @p n characters. Alternatively, it can be NULL, in which case
- * nothing will be printed, and only the number of characters which _could_ have been printed is
- * tallied and returned.
- * @param n The maximum number of characters to write to the array, including a terminating null character
- * @param format A string specifying the format of the output, with %-marked specifiers of how to interpret
- * additional arguments.
+ * @param s An array in which to store the formatted string. It must be large enough to fit either
+ *     the entire formatted output, or at least @p count characters. Alternatively, it can be
+ *     `NULL`, in which case nothing will be printed, and only the number of characters which
+ *     _could_ have been printed is tallied and returned.
+ * @param n The maximum number of characters to write to the array, including a terminating null
+ *     character.
+ * @param format A string specifying the format of the output, with %-marked specifiers of how to
+ *     interpret additional arguments.
  * @param arg Additional arguments to the function, one for each specifier in @p format
- * @return The number of characters that COULD have been written into @p s, not counting the terminating
- *         null character. A value equal or larger than @p n indicates truncation. Only when the returned value
- *         is non-negative and less than @p n, the null-terminated string has been fully and successfully printed.
+ * @return The number of characters that COULD have been written into @p s, not counting the
+ *     terminating null character. A value equal or larger than @p count indicates truncation.
+ *     Only when the returned value is non-negative and less than @p count, the null-terminated
+ *     string has been fully and successfully printed.
  */
 ///@{
 PRINTF_HD PRINTF_VISIBILITY
@@ -177,18 +180,21 @@ int vsnprintf_(char* s, size_t count, const char* format, va_list arg) ATTR_VPRI
 
 
 /**
- * printf/vprintf with user-specified output function
+ * @brief printf/vprintf with user-specified output function
  *
- * An alternative to @ref printf_, in which the output function is specified dynamically
- * (rather than @ref putchar_ being used)
+ * @note These functions are alternatives @ref printf_ / @ref vprintf_, which do not use the fixed
+ * output function @ref putchar_; rather, the output function to use is specified dynamically by
+ * the caller.
  *
  * @param out An output function which takes one character and a type-erased additional parameters
  * @param extra_arg The type-erased argument to pass to the output function @p out with each call
- * @param format A string specifying the format of the output, with %-marked specifiers of how to interpret
- * additional arguments.
+ * @param format A string specifying the format of the output, with %-marked specifiers of how to
+ *     interpret additional arguments.
  * @param arg Additional arguments to the function, one for each specifier in @p format
- * @return The number of characters for which the output f unction was invoked, not counting the terminating null character
- *
+ * @return The number of characters for which the output function was invoked, not counting the
+ *     terminating null character. If `nullptr` was passed as the output function pointer, the
+ *     number of _intended_ characters will be returned without any characters being written
+ *     anywhere nor the function ever invoked.
  */
 PRINTF_HD PRINTF_VISIBILITY
 int fctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, ...) ATTR_PRINTF(3, 4);
