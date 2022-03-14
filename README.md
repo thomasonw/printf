@@ -1,3 +1,9 @@
+Please note:  I made this fork simply to have a local archive / stable snapshot.   
+PLEASE DO NOT PROPGATE THIS FORK WIDER! USE THE ORIGIONAL ONE!!
+
+
+
+
 # Standalone printf/sprintf formatted printing function library
 
 [![tests passing](https://github.com/eyalroz/printf/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/eyalroz/printf/actions/workflows/build_and_test.yml)
